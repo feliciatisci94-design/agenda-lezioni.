@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi Agenda de Clases</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#20253c;background:#f6f7fb}*{box-sizing:border-box}body{margin:0}main{max-width:960px;margin:auto;padding:20px}header{display:flex;justify-content:space-between;align-items:center;gap:12px}h1{font-size:1.6rem;margin:10px 0}h2{font-size:1.15rem}p{line-height:1.5}.muted{color:#667085}.panel{background:white;border:1px solid #e7e9f0;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 6px 22px #27344d0a}input,textarea,select,button{font:inherit}input,textarea,select{width:100%;padding:12px;border:1px solid #cfd4df;border-radius:10px;background:#fff}label{display:block;font-size:.9rem;font-weight:600;margin:12px 0 5px}button{cursor:pointer;border:0;border-radius:10px;padding:11px 16px;background:#5144c7;color:white;font-weight:650}button.secondary{background:#eeecff;color:#4339a7}button.danger{background:#ffe8e8;color:#a4212b}button.ghost{background:#f1f2f6;color:#283047}button:disabled{opacity:.6;cursor:wait}.flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hidden{display:none!important}.event{border-left:5px solid #5144c7;background:#fafaff;border-radius:12px;padding:14px;margin:10px 0}.event h3{margin:0 0 6px}.event small{color:#5b6070}.msg{min-height:22px;color:#a4212b}.ok{color:#13744c}.day{margin-top:18px;font-weight:700}.calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}.calday{padding:8px 3px;min-height:63px;background:#f6f6fd;color:#263047;border-radius:9px;text-align:center;font-weight:500}.calday.active{background:#e5e1ff;color:#3c319e}.calday .dot{display:block;margin:4px auto;background:#6c5ce7;width:7px;height:7px;border-radius:100%}.weekday{text-align:center;color:#667085;font-size:.75rem}.calday.empty{background:transparent}.login{max-width:440px;margin:8vh auto}.toolbar{margin:14px 0}.tag{background:#eeeaff;border-radius:99px;padding:4px 10px;color:#4b3da6;font-size:.8rem}@media(max-width:560px){main{padding:12px}.grid{grid-template-columns:1fr}.panel{padding:15px}.calday{min-height:51px}header{align-items:flex-start}button{padding:10px 12px}}
+</style></head><body><main>
+<section id="login" class="panel login"><h1>📚 Mi Agenda de Clases</h1><p class="muted">Accede con tu cuenta para guardar tus clases de forma privada en la nube.</p>
+<form id="loginForm"><label>Correo electrónico</label><input id="email" type="email" required autocomplete="email">
+<label>Contraseña</label><input id="password" type="password" required autocomplete="current-password">
+<p id="loginMsg" class="msg" role="alert"></p><button type="submit">Entrar</button></form>
+<p class="muted" style="font-size:.85rem">Primero debes crear tu usuario en Supabase Authentication. No uses aquí la contraseña del proyecto Supabase.</p></section>
+<section id="app" class="hidden"><header><div><h1>📚 Mi Agenda de Clases</h1><div id="who" class="muted"></div></div><button class="ghost" id="logout">Salir</button></header>
+<div class="panel"><div class="flex between"><h2>Calendario</h2><button id="new" type="button">+ Nueva clase</button></div>
+<div class="flex between toolbar"><button class="secondary" id="prev" type="button">‹</button><strong id="month"></strong><button class="secondary" id="next" type="button">›</button><button class="ghost" id="today" type="button">Hoy</button></div><div id="calendar" class="calendar"></div></div>
+<div class="panel"><div class="flex between"><h2>Mis clases</h2><span class="tag" id="count"></span></div><p id="loadMsg" class="muted"></p><div id="events"></div></div>
+</section>
+<section id="editor" class="panel hidden"><div class="flex between"><h2 id="formTitle">Nueva clase</h2><button id="close" type="button" class="ghost">Cerrar</button></div>
+<form id="lessonForm"><input type="hidden" id="lessonId">
+<div class="grid"><div><label>Estudiante</label><input id="student" required maxlength="120"></div><div><label>Título</label><input id="title" value="Clase de italiano" required maxlength="150"></div>
+<div><label>Inicio</label><input id="start" type="datetime-local" required></div><div><label>Fin</label><input id="end" type="datetime-local" required></div></div>
+<label>Enlace de Microsoft Teams (opcional)</label><input id="teams" type="url" placeholder="https://teams.microsoft.com/...">
+<label>Notas</label><textarea id="notes" rows="3"></textarea>
+<label>Color</label><select id="color"><option value="blue">Morado</option><option value="green">Verde</option><option value="orange">Naranja</option><option value="pink">Rosa</option></select>
+<p id="editMsg" class="msg" role="alert"></p><div class="flex"><button type="submit" id="save">Guardar clase</button><button id="delete" type="button" class="danger hidden">Eliminar</button></div></form></section>
+</main><script type="module">
+import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
+const db=createClient('https://fjdcqmbnncnupxkyxfsn.supabase.co','sb_publishable_rwMtlKx9Bi5mlog7P-xCZw_o4hgToKn');
+const $=id=>document.getElementById(id);
+let lessons=[],view=new Date(),user=null;
+const htmlEscape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const time=s=>new Date(s).toLocaleString('es-ES',{timeZone:'Europe/Madrid',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+const localISO=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,16)};
+function showEditor(x){$('editor').classList.remove('hidden');$('formTitle').textContent=x?'Editar clase':'Nueva clase';$('lessonId').value=x?.id||'';$('student').value=x?.student_name||'';$('title').value=x?.lesson_title||'Clase de italiano';$('start').value=x?localISO(new Date(x.starts_at)):localISO(new Date());$('end').value=x?localISO(new Date(x.ends_at)):localISO(new Date(Date.now()+3600000));$('teams').value=x?.teams_url||'';$('notes').value=x?.notes||'';$('color').value=x?.color||'blue';$('delete').classList.toggle('hidden',!x);$('editMsg').textContent='';$('editor').scrollIntoView({behavior:'smooth'})}
+function render(){
+const first=new Date(view.getFullYear(),view.getMonth(),1),last=new Date(view.getFullYear(),view.getMonth()+1,0);
+$('month').textContent=first.toLocaleDateString('es-ES',{month:'long',year:'numeric'});$('count').textContent=lessons.length+' clases';
+const cal=$('calendar');cal.innerHTML='';for(const n of ['L','M','X','J','V','S','D']){const e=document.createElement('div');e.className='weekday';e.textContent=n;cal.append(e)}
+const offset=(first.getDay()+6)%7;for(let i=0;i<offset;i++){const e=document.createElement('div');e.className='calday empty';cal.append(e)}
+for(let d=1;d<=last.getDate();d++){const e=document.createElement('button');e.type='button';e.className='calday';const day=new Date(view.getFullYear(),view.getMonth(),d);if(day.toDateString()===new Date().toDateString())e.classList.add('active');const has=lessons.some(x=>new Date(x.starts_at).toDateString()===day.toDateString());e.innerHTML=d+(has?'<span class="dot"></span>':'');e.onclick=()=>{const target=document.querySelector('[data-day="'+day.toDateString()+'"]');target?.scrollIntoView({behavior:'smooth',block:'center'})};cal.append(e)}
+const ev=$('events');ev.innerHTML='';const grouped=new Map();for(const x of lessons){const date=new Date(x.starts_at).toDateString();if(!grouped.has(date))grouped.set(date,[]);grouped.get(date).push(x)}
+for(const [date,items] of grouped){const h=document.createElement('div');h.className='day';h.dataset.day=date;h.textContent=new Date(date).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'});ev.append(h);
+for(const x of items){const card=document.createElement('div');card.className='event';card.style.borderLeftColor=({blue:'#6555d9',green:'#249b71',orange:'#e99639',pink:'#db5e98'})[x.color]||'#6555d9';
+const valid=/^https:\/\/(teams\.microsoft\.com|teams\.live\.com)\//i.test(x.teams_url||'');
+card.innerHTML='<h3>'+htmlEscape(x.student_name)+'</h3><div>'+htmlEscape(x.lesson_title)+'</div><small>'+htmlEscape(time(x.starts_at))+' – '+htmlEscape(new Date(x.ends_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}))+'</small>'+(x.notes?'<p>'+htmlEscape(x.notes)+'</p>':'')+'<div class="flex" style="margin-top:10px"><button type="button" class="secondary edit">Editar</button>'+(valid?'<a class="join" target="_blank" rel="noopener noreferrer" style="padding:10px;border-radius:10px;background:#e6f5ef;color:#136846;text-decoration:none;font-weight:650" href="'+htmlEscape(x.teams_url)+'">Entrar en Teams</a>':'')+'</div>';card.querySelector('.edit').onclick=()=>showEditor(x);ev.append(card)}}
+if(!lessons.length)ev.innerHTML='<p class="muted">Todavía no hay clases. Pulsa «Nueva clase» para añadir la primera.</p>';
+}
+async function load(){if(!user)return;$('loadMsg').textContent='Cargando…';const {data,error}=await db.from('lessons').select('*').order('starts_at');$('loadMsg').textContent=error?'Error al cargar: '+error.message:'';if(!error){lessons=data||[];render()}}
+async function session(){const {data:{user:u}}=await db.auth.getUser();user=u;$('login').classList.toggle('hidden',!!u);$('app').classList.toggle('hidden',!u);$('editor').classList.add('hidden');if(u){$('who').textContent=u.email;await load()}}
+$('loginForm').onsubmit=async e=>{e.preventDefault();$('loginMsg').textContent='Entrando…';const {error}=await db.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});if(error){$('loginMsg').textContent=error.message;return}$('loginMsg').textContent='';await session()};
+$('logout').onclick=async()=>{await db.auth.signOut();await session()};
+$('new').onclick=()=>showEditor(null);$('close').onclick=()=>$('editor').classList.add('hidden');
+$('prev').onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);render()};
+$('next').onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);render()};
+$('today').onclick=()=>{view=new Date();render()};
+$('lessonForm').onsubmit=async e=>{e.preventDefault();$('editMsg').textContent='Guardando…';const start=new Date($('start').value),end=new Date($('end').value),teams=$('teams').value.trim();if(end<=start){$('editMsg').textContent='La hora de fin debe ser posterior al inicio';return}if(teams&&!/^https:\/\/(teams\.microsoft\.com|teams\.live\.com)\//i.test(teams)){$('editMsg').textContent='Introduce un enlace válido de Microsoft Teams';return}
+const row={student_name:$('student').value.trim(),lesson_title:$('title').value.trim(),starts_at:start.toISOString(),ends_at:end.toISOString(),teams_url:teams||null,notes:$('notes').value,color:$('color').value};
+const id=$('lessonId').value;const res=id?await db.from('lessons').update(row).eq('id',id):await db.from('lessons').insert({...row,owner_id:user.id});if(res.error){$('editMsg').textContent=res.error.message;return}$('editor').classList.add('hidden');await load()};
+$('delete').onclick=async()=>{const id=$('lessonId').value;if(!id||!confirm('¿Eliminar esta clase?'))return;const {error}=await db.from('lessons').delete().eq('id',id);if(error){$('editMsg').textContent=error.message;return}$('editor').classList.add('hidden');await load()};
+db.auth.onAuthStateChange(()=>{setTimeout(session,0)});session();
+</script></body></html>
